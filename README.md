@@ -1,4 +1,4 @@
-##Parametric PaCMAP. (this project is incomplete and not yet in a functional condition)
+#Parametric PaCMAP. (this project is incomplete and not yet in a functional condition)
 
 A Parametric reformulation of the Pairwise Controlled Manifold Approximation Projection (PaCMAP) algorithm by Wang et al., Inspired by Sainburg et al's parametric reformulation of the Uniform Manifold Approximation Projection (UMAP) algorithm.
 
