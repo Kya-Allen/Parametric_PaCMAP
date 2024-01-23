@@ -2,7 +2,7 @@
 
 A Parametric reformulation of the Pairwise Controlled Manifold Approximation Projection (PaCMAP) algorithm by Wang et al., Inspired by Sainburg et al's parametric reformulation of the Uniform Manifold Approximation Projection (UMAP) algorithm.
 
-Unlike prior dimensionality reduction algorithms such as UMAP and t-sne, PaCMAP stands out and above the rest by employing a multistage embedding process that applies differential losses for different kinds of point pairs based on their nearness, where each stage alters the weights on the losses of these kinds of pairs. This highly controlled pairwise loss allows PaCMAP to excel at preserving both the local and global distances in the data.
+Unlike prior dimensionality reduction algorithms such as UMAP and t-sne, PaCMAP stands out and above the rest by employing a multistage embedding process that applies differential losses for different kinds of point pairs based on their nearness, where each stage alters the weights on the losses of these kinds of pairs. This highly controlled pairwise loss allows PaCMAP to excel at preserving both the local and global structure in the data.
 
 Sainburg et al., found that a parametric version of UMAP, where a deep neural network learns a function of the projection, not only yields projections of similar (or improved) quality compared to UMAP, but also allows for very fast projection of new unseen data into the projection space. This is very useful for real-time applications, and it's likely that the same benefits could exist for PaCMAP without any loss of quality 
 
