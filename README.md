@@ -10,7 +10,7 @@ This project consists of two parts, both built on PyTorch:
   * a new PyTorch Loss class "PaCMAPLoss(torch.nn.Module)" which implements the pairwise controlled logic of the PaCMAP loss, but suited for training a neural network, and progressing through stages as the network progresses through Epcohs
   * a simple [insert final number] layer encoder network "ParametricPaCMAP(torch.nn.Module). (of course it should be easy to use your own custom encoder).
 
-In the future, look forward to performance analyses in the same vein as Seinburg et al., with parametric UMAP
+In the future, look forward to a performance analysis in the same vein as Seinburg et al., with parametric UMAP
 
 
 @article{JMLR:v22:20-1061,

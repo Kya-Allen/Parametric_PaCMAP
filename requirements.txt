@@ -1,0 +1,7 @@
+opencv-python
+numpy
+Pillow
+matplotlib
+tqdm
+scikit-learn
+# torch torchvision -f https://download.pytorch.org/whl/torch_stable.html

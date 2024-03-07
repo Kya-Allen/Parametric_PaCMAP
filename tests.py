@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import torchvision
 from torch import Tensor
 import unittest as unit
 import losses as l

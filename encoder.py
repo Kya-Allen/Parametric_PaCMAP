@@ -3,6 +3,7 @@ from numpy import ndarray
 from numpy.typing import ArrayLike, NDArray
 import torch
 from torch import Tensor
+from torch.optim import Optimizer
 import losses
 from sklearn.neighbors import NearestNeighbors
 
@@ -10,12 +11,12 @@ def pacmap_distance(pairs: Tensor) -> Tensor:
   norms = torch.norm(pairs[:, 0] - pairs[:, 1], dim=1, p=2, keepdim=False)
   return norms.pow(2) + 1
 
-class PaCMAPNet(torch.nn.Module):
-    def __init__(self, input_dim):
+class PaCMAPEncoder(torch.nn.Module):
+    def __init__(self, input_dim, output_dim=3):
       super().__init__()
       self.input_dim = input_dim
       self.encoder = torch.nn.Sequential(
-        torch.nn.Linear(384, 192),
+        torch.nn.Linear(input_dim, 192), # our project is 384 input
         torch.nn.ReLU(),
         torch.nn.Linear(192, 96),
         torch.nn.ReLU(),
@@ -25,27 +26,49 @@ class PaCMAPNet(torch.nn.Module):
       )
 
 
-    def forward(self, data: Tensor, n_neighbors, mn_ratio, FP_ratio):
-      if self.nn_graph == {}:
-        self.compute_graph()
+    def forward(self, data: Tensor, graph: dict, n_neighbors, mn_ratio, FP_ratio):
       valid = self.validate_input(data)
       if not valid[0]: raise Exception(valid[1])
       return self.encoder(data)
 
     def validate_input(self, data) -> tuple[bool, str]:
       return
+      
+class PaCMAPRefiner(torch.nn.Module):
+    def __init__(self, input_dim):
+      super().__init__()
+      self.input_dim = input_dim
+      self.net = torch.nn.Sequential(
+        torch.nn.Linear(input_dim, input_dim),
+        torch.nn.ReLU(),
+        torch.nn.Linear(input_dim, input_dim),
+        torch.nn.ReLU(),
+        torch.nn.Linear(input_dim, input_dim),
+        torch.nn.ReLU(),
+        torch.nn.Linear(input_dim, input_dim),
+      )
+
+
+    def forward(self, data: Tensor, graph: dict, n_neighbors, mn_ratio, FP_ratio):
+      valid = self.validate_input(data)
+      if not valid[0]: raise Exception(valid[1])
+      return self.net(data)
+
+    def validate_input(self, data) -> tuple[bool, str]:
+      return
 
 
 class ParametricPacMAP():
-  def __init__(self, data: Tensor, n_neighbors=10, mn_ratio=0.5, fp_ratio=2.0):
+  def __init__(self, data: Tensor, output_dim: int, n_neighbors=10, mn_ratio=0.5, fp_ratio=2.0):
     self.data: Tensor = data
     self.size: int = data.shape[0]
+    if output_dim > 24: raise Exception('output_dim must be 24 or less')
+    self.output_dim: int = output_dim
     self.dimensionality: int = data.shape[1]
     self.n_neighbors: int = n_neighbors
     self.mn_ratio: float = mn_ratio
     self.fp_ratio: float = fp_ratio
-
-    self.network = PaCMAPNet(self.dimensionality)
+    self.output_data = Tensor([])
 
   graph: dict = {
         #adjacency graph for each type of edge
@@ -54,19 +77,41 @@ class ParametricPacMAP():
         'far_pairs': {}
     }
 
-  def train(self, epochs: int, optimizer: torch.Optimizer, phase_1=0, phase_2=100, phase_3=200):
+  def train_batchless(self, epochs: int, optimizer_type='Adam'):
+    self.networks: tuple[torch.nn.Module] = (PaCMAPEncoder(self.dimensionality), PaCMAPRefiner(self.dimensionality), PaCMAPRefiner(self.dimensionality))
+    optimizers: Optimizer = self.__set_optimizers(optimizer_type)
     if self.graph['neighbor_pairs'] == {}:
       self.compute_graph()
     for epoch in range(epochs):
-      for datum in self.data:
-        # Forward pass
-        output: Tensor = self.network(self.data, self.n_neighbors, self.mn_ratio, self.FP_ratio)
-        loss = loss.PaCMAPLoss(output, self.neighbor_graph, epoch, phase_1, phase_2, phase_3)
+        input: Tensor = self.data
+        for net_index, network in enumerate(self.networks):
+          # Forward pass
+          output: Tensor = network(input, self.output_dim)
+          loss: Tensor = loss.PaCMAPLoss(output, self.n_neighbors, self.n_mn, self.n_fp, self.neighbor_graph, epoch, epochs, phase=net_index)
 
-        # backward and optimize
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+          # backward and optimize
+          optimizers[net_index].zero_grad()
+          loss.backward()
+          optimizers[net_index].step()
+
+          # set output as input for next network
+          input = output
+
+  def __set_optimizers(self, optimizer_type) -> tuple[Optimizer]:
+    match optimizer_type:
+      case 'Adam':
+        optimizers = (
+          torch.optim.Adam(self.networks[0]),
+          torch.optim.Adam(self.networks[1]),
+          torch.optim.Adam(self.networks[2])
+              )
+      case 'SGD':
+       optimizers = (
+          torch.optim.SGD(self.networks[0]),
+          torch.optim.SGD(self.networks[1]),
+          torch.optim.SGD(self.networks[2])
+              )
+    return optimizers
 
   def compute_graph(self) -> dict:
     for index, datum in enumerate(self.data):
@@ -84,8 +129,8 @@ class ParametricPacMAP():
     return Tensor([neighbor[1] for neighbor in neighbors])
 
   def __get_midnears(self, query: Tensor[float]) -> Tensor[int]:
-    n_midnears: int =  int(self.n_neighbors * self.mn_ratio) #is this right?
-    midnears: Tensor = torch.zeros((1, n_midnears))
+    self.n_mn: int =  int(self.n_neighbors * self.mn_ratio) #is this right?
+    midnears: Tensor = torch.zeros((1, self.n_mn))
     for neighbor_slot in midnears:
       sample_map: ndarray[int] = np.random.randint(self.size, size=6)
       neighbor: tuple = self.__pacmap_nearest_neighbors(query, self.data, sample_map, 2)[1]
@@ -93,8 +138,8 @@ class ParametricPacMAP():
     return midnears 
   
   def __get_farpairs(self) -> Tensor[int]:
-    n_farpairs: int = int(self.n_neighbors * self.fp_ratio)
-    sampled_indicies: Tensor[int] = torch.randint(0, self.size, (n_farpairs,))
+    self.n_fp: int = int(self.n_neighbors * self.fp_ratio)
+    sampled_indicies: Tensor[int] = torch.randint(0, self.size, (self.n_fp,))
     return sampled_indicies
   
   def __pacmap_nearest_neighbors(self, query: Tensor[float], data: Tensor, nearest_indices: ndarray, n_neighbors: int) -> list[tuple[float, int]]:
