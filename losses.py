@@ -47,7 +47,7 @@ class PaCMAPLoss(torch.nn.Module):
     far_weight: float = 1.0
     return (neighbor_weight, midnear_weight, far_weight)
   
-  def __load_pairs(self, type: str, n_pairs, graph: dict, input: Tensor) -> Tensor[float]:
+  def __load_pairs(self, type: str, n_pairs, graph: dict, input: Tensor) -> Tensor:
     pairs: Tensor[float] = torch.zeros((n_pairs, 2, input.size[1]))
     
     slot_index: int = 0
