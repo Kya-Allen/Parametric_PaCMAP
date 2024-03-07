@@ -75,10 +75,12 @@ class ParametricPacMAP():
         'neighbor_pairs': {},
         'midnear_pairs': {},
         'far_pairs': {}
+        # note, batch can be achieved by constructing a seperate graph per batch.
+        # other parameters like n_neighbors may need tuning.
     }
 
   def train_batchless(self, epochs: int, optimizer_type='Adam'):
-    self.networks: tuple[torch.nn.Module] = (PaCMAPEncoder(self.dimensionality), PaCMAPRefiner(self.dimensionality), PaCMAPRefiner(self.dimensionality))
+    self.networks: tuple[torch.nn.Module] = (PaCMAPEncoder(self.dimensionality, self.output_dim), PaCMAPRefiner(self.dimensionality), PaCMAPRefiner(self.dimensionality))
     optimizers: Optimizer = self.__set_optimizers(optimizer_type)
     if self.graph['neighbor_pairs'] == {}:
       self.compute_graph()
@@ -86,7 +88,7 @@ class ParametricPacMAP():
         input: Tensor = self.data
         for net_index, network in enumerate(self.networks):
           # Forward pass
-          output: Tensor = network(input, self.output_dim)
+          output: Tensor = network.forward(input, self.graph, self.n_neighbors, self.mn_ratio, self.fp_ratio)
           loss: Tensor = loss.PaCMAPLoss(output, self.n_neighbors, self.n_mn, self.n_fp, self.neighbor_graph, epoch, epochs, phase=net_index)
 
           # backward and optimize
