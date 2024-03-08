@@ -12,26 +12,26 @@ class PaCMAPLoss(torch.nn.Module):
     return norms.pow(2) + 1
 
   def pacmap_near_loss(self, neighbor_pairs: Tensor) -> float:
-    distance: Tensor = self.pacmap_distance(self, neighbor_pairs)
+    distance: Tensor = self.pacmap_distance(neighbor_pairs)
     ratio: Tensor = distance / (10 + distance)
     loss: float = torch.sum(ratio)
     return loss
 
   def pacmap_midnear_loss(self, midnear_pairs: Tensor) -> float:
-    distance: Tensor = self.pacmap_distance(self, midnear_pairs)
+    distance: Tensor = self.pacmap_distance(midnear_pairs)
     ratio: Tensor = distance / (10000 + distance)
     loss: float = torch.sum(ratio)
     return loss
 
   def pacmap_far_loss(self, far_pairs: Tensor) -> float:
-    distance: Tensor = self.pacmap_distance(self, far_pairs)
+    distance: Tensor = self.pacmap_distance(far_pairs)
     ratio: Tensor = 1 / (1 + distance)
     loss: float = torch.sum(ratio)
     return loss
 
-  def phase_1(self, t1, t2) -> tuple[float, float, float]:
+  def phase_1(self, iteration: int, t2: int) -> tuple[float, float, float]:
     neighbor_weight: float = 2.0
-    midnear_weight: float = 1000.0 * (1 - ((t1-1)/(t2-1))) + 3 * ((t1-1)/(t2-1))
+    midnear_weight: float = 1000.0 * (1 - ((iteration-1)/(t2-1))) + 3 * ((iteration-1)/(t2-1))
     far_weight: float = 1.0
     return (neighbor_weight, midnear_weight, far_weight)
 
@@ -65,7 +65,7 @@ class PaCMAPLoss(torch.nn.Module):
 
     match phase:
       case 1:
-        neighbor_weight, midnear_weight, far_weight  = self.phase_1(epochs, epochs)
+        neighbor_weight, midnear_weight, far_weight  = self.phase_1(iteration, epochs)
       case 2: 
         neighbor_weight, midnear_weight, far_weight  = self.phase_2()
       case 3:
@@ -80,9 +80,9 @@ class PaCMAPLoss(torch.nn.Module):
     far_pairs: Tensor[float] = self.__load_pairs('far_pairs', n_far_pairs, graph, input)
 
 
-    near_loss: float = self.pacmap_near_loss(near_pairs, input.size()[1]) * neighbor_weight
-    midnear_loss: float = self.pacmap_midnear_loss(mid_pairs, input.size()[1]) * midnear_weight
-    far_loss: float = self.pacmap_far_loss(far_pairs, input.size()[1]) * far_weight
+    near_loss: float = self.pacmap_near_loss(near_pairs) * neighbor_weight
+    midnear_loss: float = self.pacmap_midnear_loss(mid_pairs) * midnear_weight
+    far_loss: float = self.pacmap_far_loss(far_pairs) * far_weight
 
-    loss = near_loss, midnear_loss, far_loss
+    loss = near_loss + midnear_loss + far_loss
     return loss

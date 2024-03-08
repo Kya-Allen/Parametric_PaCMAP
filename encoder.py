@@ -8,11 +8,35 @@ import losses
 from sklearn.neighbors import NearestNeighbors
 
 def pacmap_distance(pair: Tensor) -> Tensor:
+  '''Compute the PaCMAP distance metric. A variant of Euclidean distance
+
+  Parameters
+  ----------
+  pair : torch.Tensor
+    a Tensor of size (2, p) where p is the dimension of data points
+
+  Returns
+  -------
+  distances : torch.Tensor
+    a Tensor of the distance
+  '''
   norms = torch.linalg.vector_norm(pair[0] - pair[1], ord=2)
   return norms.pow(2) + 1
 
 class PaCMAPEncoder(torch.nn.Module):
-    def __init__(self, input_dim, output_dim=3):
+    '''PaCMAP Encoder Network
+    
+    Parameters
+    ----------
+
+    input_dim : int
+      The dimesionality of your input data
+    
+    output_dim : int, default=3
+      The desired reduced dimensionality. Must be 24 or less
+
+    '''
+    def __init__(self, input_dim: int, output_dim=3):
       super().__init__()
       self.input_dim = input_dim
       if output_dim > 24: raise Exception('output_dim must be 24 or less')
@@ -36,10 +60,18 @@ class PaCMAPEncoder(torch.nn.Module):
       return
       
 class PaCMAPRefiner(torch.nn.Module):
-    def __init__(self, input_dim):
+    '''PaCPMAP Refiner Network
+
+    Parameters
+    ----------
+
+    input_dim : int
+      dimensionality of the input data, typically the output dimension from PaCMAP Encoder
+    '''
+    def __init__(self, input_dim: int):
       super().__init__()
-      self.input_dim = input_dim
-      self.net = torch.nn.Sequential(
+      self.input_dim: int = input_dim
+      self.net: torch.nn.Sequential = torch.nn.Sequential(
         torch.nn.Linear(input_dim, input_dim),
         torch.nn.ReLU(),
         torch.nn.Linear(input_dim, input_dim),
@@ -59,7 +91,33 @@ class PaCMAPRefiner(torch.nn.Module):
       return
 
 
-class ParametricPacMAP():
+class ParametricPaCMAP():
+  '''Parametric PaCMAP
+
+  Parameters
+  ----------
+
+  data : torch.Tensor
+    data Tensor of size (n, p) where n is sample size and p is dimensionality 
+
+  output_dim : int
+    desired reduced dimensionality
+
+  n_neighbors : int, default=10
+    number of nearest neighbors for the PaCMAP graph to store
+
+  mn_ratio : float, default=0.5
+    ratio of mid-near neighbors to nearest neighbors for the PaCMAP graph to store
+
+  fp_ratio : float, default=2.0
+    ratio of far/non-neighbors to nearest neightbors, for the PaCMAP graph to store 
+
+  Attributes
+  ----------
+
+  graph : dict[dict[Tensor]]
+    Storing the PaCMAP graph. A dict of 3 dicts, each for storing the adjacency lists for each type of neighbors
+  '''
   def __init__(self, data: Tensor, output_dim: int, n_neighbors=10, mn_ratio=0.5, fp_ratio=2.0):
     self.data: Tensor = data
     self.size: int = data.shape[0]
@@ -80,7 +138,29 @@ class ParametricPacMAP():
         # other parameters like n_neighbors may need tuning.
     }
 
-  def train_batchless(self, epochs: int, optimizer_type='Adam'):
+  def train_fullbatch(self, epochs: int, optimizer_type='Adam'):
+    ''' Automated full-batch training of PaCMAP networks, using the standard 3 network architecture
+        A PaCMAP Encoder followed by two PaCMAP refiners, each corresponding to one of the 3 PaCMAP phases/losses
+
+    Parameters
+    ---------- 
+
+      epochs : int
+        number of epochs, and the number of network updates for each subnetwork. 
+
+      optimizer_type : str, default='Adam'
+        optimizer to update weights. Only Adam is available now.
+
+    Returns
+    -------
+
+    losses : tuple[list[torch.Tensor]]
+      list of losses over the course of training
+    '''
+    losses_1: list[Tensor] = []
+    losses_2: list[Tensor] = []
+    losses_3: list[Tensor] = []
+    losses: list[list] = [losses_1, losses_2, losses_3]
     self.networks: tuple[torch.nn.Module] = (PaCMAPEncoder(self.dimensionality, self.output_dim), PaCMAPRefiner(self.dimensionality), PaCMAPRefiner(self.dimensionality))
     optimizers: Optimizer = self.__set_optimizers(optimizer_type)
     if self.graph['neighbor_pairs'] == {}:
@@ -91,6 +171,7 @@ class ParametricPacMAP():
           # Forward pass
           output: Tensor = network.forward(input, self.graph, self.n_neighbors, self.mn_ratio, self.fp_ratio)
           loss: Tensor = loss.PaCMAPLoss(output, self.n_neighbors, self.n_mn, self.n_fp, self.neighbor_graph, epoch, epochs, phase=net_index)
+          losses[net_index].append(loss)
 
           # backward and optimize
           optimizers[net_index].zero_grad()
@@ -99,24 +180,33 @@ class ParametricPacMAP():
 
           # set output as input for next network
           input = output
+    
+    return (losses[0], losses[1], losses[2])
 
   def __set_optimizers(self, optimizer_type) -> tuple[Optimizer]:
     match optimizer_type:
       case 'Adam':
         optimizers = (
-          torch.optim.Adam(self.networks[0]),
-          torch.optim.Adam(self.networks[1]),
-          torch.optim.Adam(self.networks[2])
+          torch.optim.Adam(self.networks[0].parameters()),
+          torch.optim.Adam(self.networks[1].parameters()),
+          torch.optim.Adam(self.networks[2].parameters())
               )
       case 'SGD':
        optimizers = (
-          torch.optim.SGD(self.networks[0]),
-          torch.optim.SGD(self.networks[1]),
-          torch.optim.SGD(self.networks[2])
+          torch.optim.SGD(self.networks[0].parameters()),
+          torch.optim.SGD(self.networks[1].parameters()),
+          torch.optim.SGD(self.networks[2].parameters())
               )
     return optimizers
 
   def compute_graph(self) -> dict:
+    '''Compute the PaCMAP graph
+    
+    Returns
+    -------
+    self.graph : dict[dict[Tensor]]
+      the PaCMAP grpah attribute
+    '''
     for index, datum in enumerate(self.data):
       self.graph['neighbor_pairs'][index] = self.__get_neighbors(datum).type(int64)
       self.graph['midnear_pairs'][index] = self.__get_midnears(datum).type(int64)
