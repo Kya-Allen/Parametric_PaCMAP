@@ -118,9 +118,9 @@ class ParametricPacMAP():
 
   def compute_graph(self) -> dict:
     for index, datum in enumerate(self.data):
-      self.graph['neighbor_pairs'][index] = self.__get_neighbors(datum)
-      self.graph['midnear_pairs'][index] = self.__get_midnears(datum)
-      self.graph['far_pairs'][index] = self.__get_farpairs()
+      self.graph['neighbor_pairs'][index] = self.__get_neighbors(datum).type(int64)
+      self.graph['midnear_pairs'][index] = self.__get_midnears(datum).type(int64)
+      self.graph['far_pairs'][index] = self.__get_farpairs().type(int64)
     return self.graph
 
   def __get_neighbors(self, datum: Tensor) -> Tensor:
