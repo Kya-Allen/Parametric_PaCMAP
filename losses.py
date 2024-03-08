@@ -3,6 +3,8 @@ import torch
 from torch import Tensor
 
 class PaCMAPLoss(torch.nn.Module):
+  ''' PaCMAP loss function
+  '''
   def __init__(self):
     super().__init__()
 
@@ -61,6 +63,41 @@ class PaCMAPLoss(torch.nn.Module):
     return pairs
 
   def forward(self, input: Tensor, n_neighbors: int, n_mn: int, n_fp: int, input_indicies, graph: dict, iteration: int, epochs: int, phase: int):
+    ''' PaCMAP forward
+
+    Parameters
+    ----------
+
+    input : torch.Tensor
+      Network output tensor
+
+    n_neighbors : int
+      number of nearest neighbors stored in the PaCMAP graph for each point
+
+    n_mn : int
+      number of mid-near neighbors stored in the PaCMAP graph for each point
+
+    n_fp : int
+      number of far/non-neightbors stored in the PaCMAP graph for each point
+
+    graph : dict[dict[Tensor]]
+      PaCMAP graph corresponding to data
+
+    iteration : int
+      current update iteration for the corresponding network
+    
+    epochs : int
+      total number of iterations for the corresponding network
+
+    phase : int {1, 2, 3}
+      which of the 3 phases/weight schemes to use for the loss
+
+    Returns
+    -------
+
+    loss : torch.Tensor
+      The loss. Sum of the near, mid, and far losses
+    '''
     neighbor_weight: float; midnear_weight: float; far_weight: float
 
     match phase:
